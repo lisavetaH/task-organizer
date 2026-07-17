@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  @apply bg-gray-50 text-gray-900 antialiased;
+  /* Prevent the pull-to-refresh / rubber-banding that breaks the native feel */
+  overscroll-behavior-y: none;
+}
+
+/* Utility to pad content above the fixed bottom nav + iOS home indicator */
+.pb-nav {
+  padding-bottom: calc(4rem + env(safe-area-inset-bottom));
+}
