@@ -1,5 +1,11 @@
 // Local-timezone date helpers. All weekday/month names come from Intl, never
 // hardcoded. "YYYY-MM-DD" strings match the DB `date` columns (no TZ shift).
+//
+// Locale is pinned to DISPLAY_LOCALE (not `undefined`) so formatted output is
+// identical during SSR and client hydration — `undefined` resolves to the
+// server's locale on the server but the browser's `navigator.language` on
+// the client, which caused a hydration mismatch when they differed.
+const DISPLAY_LOCALE = "en-US";
 
 export function ymd(d: Date): string {
   const y = d.getFullYear();
@@ -31,7 +37,7 @@ export function addMonths(d: Date, n: number): Date {
 }
 
 export function longDate(d: Date): string {
-  return d.toLocaleDateString(undefined, {
+  return d.toLocaleDateString(DISPLAY_LOCALE, {
     weekday: "long",
     month: "long",
     day: "numeric",
@@ -39,15 +45,15 @@ export function longDate(d: Date): string {
 }
 
 export function weekdayLong(d: Date): string {
-  return d.toLocaleDateString(undefined, { weekday: "long" });
+  return d.toLocaleDateString(DISPLAY_LOCALE, { weekday: "long" });
 }
 
 export function weekdayShort(d: Date): string {
-  return d.toLocaleDateString(undefined, { weekday: "short" });
+  return d.toLocaleDateString(DISPLAY_LOCALE, { weekday: "short" });
 }
 
 export function monthYear(d: Date): string {
-  return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  return d.toLocaleDateString(DISPLAY_LOCALE, { month: "long", year: "numeric" });
 }
 
 export function dayNum(d: Date): number {
@@ -58,7 +64,7 @@ export function dayNum(d: Date): number {
 export function weekdayInitials(): string[] {
   const base = new Date(2023, 0, 1); // a Sunday
   return Array.from({ length: 7 }, (_, i) =>
-    addDays(base, i).toLocaleDateString(undefined, { weekday: "narrow" })
+    addDays(base, i).toLocaleDateString(DISPLAY_LOCALE, { weekday: "narrow" })
   );
 }
 
@@ -67,7 +73,7 @@ export function formatTime(t: string | null): string | null {
   const [h, m] = t.split(":");
   const d = new Date();
   d.setHours(Number(h), Number(m), 0, 0);
-  return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return d.toLocaleTimeString(DISPLAY_LOCALE, { hour: "numeric", minute: "2-digit" });
 }
 
 export function isSameDay(a: Date, b: Date): boolean {
