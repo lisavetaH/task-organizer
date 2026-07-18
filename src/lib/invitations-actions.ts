@@ -73,11 +73,15 @@ export async function inviteUser(emailRaw: string): Promise<InviteResult> {
   });
 
   if (error) {
-    // 23505 = unique_violation on the pending-invite index.
+    // 23505 = unique_violation on the pending-invite index. A *cancelled* or
+    // expired invitation for this email does not trigger this — the index is
+    // partial (WHERE status = 'pending') — so this only fires when a pending
+    // invitation genuinely already exists.
     if (error.code === "23505") {
       return {
         ok: false,
-        error: "There is already an active invitation for this email.",
+        error:
+          "There is already a pending invitation for this email. Use Resend on that invitation below instead of creating a new one — or delete it first if you want to start over.",
       };
     }
     return { ok: false, error: error.message };
@@ -118,6 +122,18 @@ export async function cancelInvitation(
 ): Promise<ActionResult> {
   const supabase = createClient();
   const { error } = await supabase.rpc("revoke_invitation", {
+    p_invitation_id: invitationId,
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+/** Permanently remove an invitation row. Admin-only in DB. */
+export async function deleteInvitation(
+  invitationId: string
+): Promise<ActionResult> {
+  const supabase = createClient();
+  const { error } = await supabase.rpc("delete_invitation", {
     p_invitation_id: invitationId,
   });
   if (error) return { ok: false, error: error.message };

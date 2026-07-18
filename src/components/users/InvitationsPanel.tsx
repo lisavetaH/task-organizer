@@ -2,12 +2,13 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { UserPlus, Send, RotateCw, X, CheckCircle2 } from "lucide-react";
+import { UserPlus, Send, RotateCw, X, CheckCircle2, Trash2 } from "lucide-react";
 import type { Invitation } from "@/lib/invitations";
 import {
   inviteUser,
   resendInvitation,
   cancelInvitation,
+  deleteInvitation,
 } from "@/lib/invitations-actions";
 
 type EffectiveStatus = "pending" | "accepted" | "expired" | "cancelled";
@@ -79,6 +80,27 @@ export function InvitationsPanel({
     setSuccess(null);
     startTransition(async () => {
       const res = await cancelInvitation(inv.id);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  function onDelete(inv: Invitation, status: EffectiveStatus) {
+    if (
+      status === "pending" &&
+      !confirm(
+        `Delete the pending invitation to ${inv.email}? They will no longer be able to join using that link.`
+      )
+    ) {
+      return;
+    }
+    setError(null);
+    setSuccess(null);
+    startTransition(async () => {
+      const res = await deleteInvitation(inv.id);
       if (!res.ok) {
         setError(res.error);
         return;
@@ -199,6 +221,15 @@ export function InvitationsPanel({
                     <X className="h-4 w-4" />
                   </button>
                 ) : null}
+                <button
+                  type="button"
+                  onClick={() => onDelete(inv, status)}
+                  disabled={pending}
+                  aria-label="Delete invitation"
+                  className="grid h-9 w-9 place-items-center rounded-lg text-gray-400 active:bg-red-50 active:text-red-500 disabled:opacity-60"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
               </li>
             );
           })}

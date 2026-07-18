@@ -2,6 +2,40 @@
 
 All notable changes to this project are documented in this file.
 
+## 2026-07-18
+
+### Added
+- Invitations now send real emails via Resend instead of relying on an admin
+  manually copying/sharing a link. `sendInviteEmail` returns a real
+  success/error result; the Invitations panel shows "Invitation email sent
+  successfully." on success or the actual failure reason on error.
+  - `src/lib/email.ts`, `src/lib/invitations-actions.ts`,
+    `src/components/users/InvitationsPanel.tsx`
+- Invitation management: admins can now permanently delete an invitation row
+  (not just cancel it) — available for cancelled/expired invitations
+  directly, and for pending invitations behind a confirmation prompt.
+  - `supabase/migrations/007_invitation_deletion.sql` — new admin-checked
+    `delete_invitation` RPC.
+  - `src/lib/invitations-actions.ts` — `deleteInvitation()`.
+  - `src/components/users/InvitationsPanel.tsx` — Delete button per
+    invitation row, list refreshes immediately after deletion.
+
+### Fixed
+- Invitation links no longer derive their host from the incoming request
+  (`host` / `x-forwarded-host` headers), which caused emails sent while
+  running the local dev server to contain `http://localhost:3000/invite/...`
+  — useless on another device, and confusing on a machine also running dev.
+  `siteOrigin()` now reads `APP_URL` exclusively (set to
+  `https://taskorganizer.app` in Vercel Production), falling back to
+  `http://localhost:3000` only when unset.
+  - `src/lib/invitations-actions.ts`
+- Duplicate-invitation error message now explains the fix (use Resend on the
+  existing pending invitation, or delete it first) instead of just stating
+  the conflict. Verified separately that a *cancelled* invitation never
+  blocked re-inviting the same email — the uniqueness constraint is already
+  scoped to `status = 'pending'` only.
+  - `src/lib/invitations-actions.ts`
+
 ## 2026-07-17
 
 ### Added

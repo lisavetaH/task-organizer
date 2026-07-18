@@ -296,6 +296,7 @@ Every `git push` to `main` triggers a new **production** build on Vercel automat
   4. `004_folder_access_modes.sql`
   5. `005_invitation_flow.sql`
   6. `006_folder_items.sql`
+  7. `007_invitation_deletion.sql`
 
   Run them **in order, in full**, in the SQL editor when setting up a new Supabase project.
 - Access control is enforced by **Row Level Security** policies defined in these migrations —
