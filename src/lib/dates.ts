@@ -56,6 +56,10 @@ export function monthYear(d: Date): string {
   return d.toLocaleDateString(DISPLAY_LOCALE, { month: "long", year: "numeric" });
 }
 
+export function monthDay(d: Date): string {
+  return d.toLocaleDateString(DISPLAY_LOCALE, { month: "long", day: "numeric" });
+}
+
 export function dayNum(d: Date): number {
   return d.getDate();
 }

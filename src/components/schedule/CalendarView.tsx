@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 import { scheduledItemsInRange, type ScheduledItem } from "@/lib/schedule";
 import { foldersUserCanCreateIn } from "@/lib/folders";
+import { unscheduleItem } from "@/lib/items";
 import { ItemEditor } from "@/components/items/ItemEditor";
 import { ScheduledRow } from "./ScheduledRow";
 import { LoadingState } from "@/components/LoadingState";
@@ -15,6 +16,7 @@ import {
   startOfWeek,
   ymd,
   monthYear,
+  monthDay,
   weekdayInitials,
   isSameDay,
   longDate,
@@ -62,6 +64,16 @@ export function CalendarView({ workspaceId }: { workspaceId: string }) {
     () => (items ?? []).filter((it) => it.scheduled_date === ymd(selected)),
     [items, selected]
   );
+
+  async function handleUnschedule(itemId: string) {
+    setItems((prev) => (prev ?? []).filter((it) => it.id !== itemId));
+    try {
+      await unscheduleItem(itemId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not remove.");
+      setReloadKey((k) => k + 1); // restore accurate state
+    }
+  }
 
   async function openCreate() {
     setError(null);
@@ -170,7 +182,12 @@ export function CalendarView({ workspaceId }: { workspaceId: string }) {
         ) : (
           <ul className="divide-y divide-gray-100 pb-24">
             {selectedItems.map((it) => (
-              <ScheduledRow key={it.id} item={it} />
+              <ScheduledRow
+                key={it.id}
+                item={it}
+                dateLabel={monthDay(selected)}
+                onRemove={handleUnschedule}
+              />
             ))}
           </ul>
         )}

@@ -116,6 +116,11 @@ export async function updateItem(id: string, patch: Partial<NewItemInput>): Prom
   if (error) throw new Error(error.message);
 }
 
+/** Clears an entry's calendar assignment (date + time) without touching the entry, its folder, or its media. */
+export async function unscheduleItem(id: string): Promise<void> {
+  return updateItem(id, { scheduled_date: null, scheduled_time: null });
+}
+
 export async function setItemCompleted(id: string, completed: boolean): Promise<void> {
   const supabase = createClient();
   const { error } = await supabase
