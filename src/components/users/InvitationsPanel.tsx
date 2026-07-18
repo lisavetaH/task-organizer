@@ -2,14 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import {
-  UserPlus,
-  Send,
-  RotateCw,
-  X,
-  Copy,
-  Check,
-} from "lucide-react";
+import { UserPlus, Send, RotateCw, X, CheckCircle2 } from "lucide-react";
 import type { Invitation } from "@/lib/invitations";
 import {
   inviteUser,
@@ -44,9 +37,7 @@ export function InvitationsPanel({
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [link, setLink] = useState<string | null>(null);
-  const [emailed, setEmailed] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [success, setSuccess] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   function submitInvite() {
@@ -56,15 +47,14 @@ export function InvitationsPanel({
       return;
     }
     setError(null);
-    setLink(null);
+    setSuccess(null);
     startTransition(async () => {
       const res = await inviteUser(value);
       if (!res.ok) {
         setError(res.error);
         return;
       }
-      setLink(res.link);
-      setEmailed(res.emailed);
+      setSuccess("Invitation email sent successfully.");
       setEmail("");
       router.refresh();
     });
@@ -72,21 +62,21 @@ export function InvitationsPanel({
 
   function onResend(inv: Invitation) {
     setError(null);
-    setLink(null);
+    setSuccess(null);
     startTransition(async () => {
       const res = await resendInvitation(inv.id, inv.email);
       if (!res.ok) {
         setError(res.error);
         return;
       }
-      setLink(res.link);
-      setEmailed(res.emailed);
+      setSuccess("Invitation email sent successfully.");
       router.refresh();
     });
   }
 
   function onCancel(inv: Invitation) {
     setError(null);
+    setSuccess(null);
     startTransition(async () => {
       const res = await cancelInvitation(inv.id);
       if (!res.ok) {
@@ -95,17 +85,6 @@ export function InvitationsPanel({
       }
       router.refresh();
     });
-  }
-
-  async function copyLink() {
-    if (!link) return;
-    try {
-      await navigator.clipboard.writeText(link);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
-    } catch {
-      /* clipboard may be unavailable; the link is visible to copy manually */
-    }
   }
 
   const visible = invitations.filter(
@@ -123,7 +102,7 @@ export function InvitationsPanel({
           onClick={() => {
             setOpen((v) => !v);
             setError(null);
-            setLink(null);
+            setSuccess(null);
           }}
           className="flex items-center gap-1.5 rounded-full bg-brand px-3 py-2 text-sm font-semibold text-white active:bg-brand-dark"
         >
@@ -168,31 +147,11 @@ export function InvitationsPanel({
             </p>
           ) : null}
 
-          {link ? (
-            <div className="mt-3 rounded-lg bg-gray-50 p-3">
-              <p className="text-sm text-gray-700">
-                {emailed
-                  ? "Invitation email sent."
-                  : "Invite created. Share this link with the person:"}
-              </p>
-              <div className="mt-2 flex items-center gap-2">
-                <code className="min-w-0 flex-1 truncate rounded bg-white px-2 py-1.5 text-xs text-gray-600">
-                  {link}
-                </code>
-                <button
-                  type="button"
-                  onClick={copyLink}
-                  aria-label="Copy link"
-                  className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-gray-200 text-gray-500 active:bg-gray-100"
-                >
-                  {copied ? (
-                    <Check className="h-4 w-4 text-emerald-600" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
-                  )}
-                </button>
-              </div>
-            </div>
+          {success ? (
+            <p className="mt-2 flex items-center gap-1.5 text-sm text-emerald-600" role="status">
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+              {success}
+            </p>
           ) : null}
         </div>
       ) : null}

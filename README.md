@@ -252,9 +252,9 @@ Every `git push` to `main` triggers a new **production** build on Vercel automat
 |---|---|---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | Yes | Public | Your Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Public | Anon/public API key, safe for browser use |
-| `NEXT_PUBLIC_SITE_URL` | No | Public | Base URL used to build invite links; falls back to the request host if unset |
-| `RESEND_API_KEY` | No | **Secret** | If set (with `INVITE_EMAIL_FROM`), invitation emails are sent via Resend |
-| `INVITE_EMAIL_FROM` | No | Secret | "From" address for invitation emails |
+| `APP_URL` | Yes (production) | Server-only, not sensitive | Base URL used to build invite links. Never derived from request headers — set explicitly per environment so links always point at the real app. Unset in local dev, where it falls back to `http://localhost:3000` |
+| `RESEND_API_KEY` | Yes (for invitations) | **Secret** | Sends invitation emails via Resend. Without it, pressing Invite fails with a clear error — there is no manual-link fallback |
+| `INVITE_EMAIL_FROM` | Yes (for invitations) | Secret | "From" address for invitation emails. `onboarding@resend.dev` (Resend's shared test domain) only delivers to the email on your own Resend account — switch to a verified domain before inviting real users |
 
 ## Where they are configured
 
@@ -438,6 +438,35 @@ This rules out the browser simply reusing a previously cached page/response.
   Supabase env vars are wrong/missing (session refresh silently fails).
 - **`profiles` row missing after signup:** check that migration `001_initial_schema.sql` was run
   in full — it defines the `handle_new_user` trigger that auto-creates a profile row.
+
+## Invitation email fails to send
+
+- **"Email delivery is not configured" error:** `RESEND_API_KEY` and/or `INVITE_EMAIL_FROM` are
+  missing from the environment (local `.env.local` or, in production, Vercel's Environment
+  Variables panel). There is no manual-link fallback — fix the env vars and try again.
+- **Error mentions the domain isn't verified, or the email silently never arrives while using
+  `onboarding@resend.dev`:** Resend's shared test domain only delivers to the email address on
+  your own Resend account. To invite anyone else, verify a real domain in the Resend dashboard
+  and point `INVITE_EMAIL_FROM` at an address on it (e.g. `invites@yourdomain.com`).
+- **Works locally but fails in production (or vice versa):** `RESEND_API_KEY` /
+  `INVITE_EMAIL_FROM` are set independently per environment, same as the Supabase keys — check
+  both `.env.local` and the Vercel dashboard.
+
+## Invitation link points to localhost (or the wrong host) in a received email
+
+**Cause:** `src/lib/invitations-actions.ts`'s `siteOrigin()` used to fall back to deriving the
+link from the incoming request's `host`/`x-forwarded-host` headers whenever `APP_URL` (formerly
+`NEXT_PUBLIC_SITE_URL`) wasn't set. If an invite was ever sent while the app was reached via
+`localhost:3000` (e.g. `npm run dev`), that host got baked into the emailed link — useless on
+another device, and on a Mac running the same dev server it silently opened the local app instead
+of production.
+
+**Fix already applied:** `siteOrigin()` no longer reads request headers at all. It only reads
+`APP_URL`, falling back to a hardcoded `http://localhost:3000` when unset. Set `APP_URL` in every
+environment where invitations should carry a real, working link — for this project, Vercel
+Production has `APP_URL=https://taskorganizer.app`. If a future invite email still shows the
+wrong host, check that `APP_URL` is set in the environment that actually sent it, not just that
+the code deployed.
 
 ---
 

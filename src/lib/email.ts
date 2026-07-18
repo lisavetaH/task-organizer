@@ -1,10 +1,12 @@
+export type SendEmailResult = { ok: true } | { ok: false; error: string };
+
 /**
  * Server-only invitation email sender.
  *
- * Sends via the Resend REST API using plain fetch (no SDK dependency). If
- * RESEND_API_KEY / INVITE_EMAIL_FROM are not configured, this is a no-op and
- * returns false — the caller then shows the admin a copyable invite link so
- * the flow still works without an email provider.
+ * Sends via the Resend REST API using plain fetch (no SDK dependency).
+ * RESEND_API_KEY / INVITE_EMAIL_FROM must be configured — see
+ * .env.local.example. Returns a discriminated result so the caller can show
+ * the admin exactly what happened instead of silently falling back.
  *
  * This module reads secrets from process.env and must only be imported by
  * server code (it is imported exclusively by the "use server" actions).
@@ -13,10 +15,16 @@ export async function sendInviteEmail(
   to: string,
   link: string,
   workspaceName: string
-): Promise<boolean> {
+): Promise<SendEmailResult> {
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.INVITE_EMAIL_FROM;
-  if (!apiKey || !from) return false;
+  if (!apiKey || !from) {
+    return {
+      ok: false,
+      error:
+        "Email delivery is not configured (RESEND_API_KEY / INVITE_EMAIL_FROM missing).",
+    };
+  }
 
   try {
     const res = await fetch("https://api.resend.com/emails", {
@@ -51,9 +59,24 @@ export async function sendInviteEmail(
         `,
       }),
     });
-    return res.ok;
-  } catch {
-    return false;
+
+    if (res.ok) return { ok: true };
+
+    // Surface Resend's actual reason (e.g. unverified domain, invalid recipient
+    // for the shared test domain) instead of a generic failure.
+    let detail = `Resend API returned ${res.status}`;
+    try {
+      const body = (await res.json()) as { message?: string };
+      if (body?.message) detail = body.message;
+    } catch {
+      /* response wasn't JSON; fall back to the status-only message above */
+    }
+    return { ok: false, error: detail };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not reach the email provider.",
+    };
   }
 }
 

@@ -1,23 +1,25 @@
 "use server";
 
-import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { sendInviteEmail } from "@/lib/email";
 import type { Membership } from "@/lib/types";
 
 export type InviteResult =
-  | { ok: true; link: string; emailed: boolean }
+  | { ok: true }
   | { ok: false; error: string };
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
+// Invitation links must always point at the app's real address, never at
+// whatever host happened to serve the request — request headers (host /
+// x-forwarded-host) are not used here on purpose. Set APP_URL in production
+// (e.g. Vercel); it's intentionally unset in local dev, where the link falls
+// back to the local dev server.
+const LOCAL_DEV_ORIGIN = "http://localhost:3000";
+
 function siteOrigin(): string {
-  const envUrl = process.env.NEXT_PUBLIC_SITE_URL;
-  if (envUrl) return envUrl.replace(/\/$/, "");
-  const h = headers();
-  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
-  const proto = h.get("x-forwarded-proto") ?? "http";
-  return `${proto}://${host}`;
+  const appUrl = process.env.APP_URL;
+  return (appUrl && appUrl.trim() ? appUrl : LOCAL_DEV_ORIGIN).replace(/\/$/, "");
 }
 
 function inviteLink(token: string): string {
@@ -83,8 +85,9 @@ export async function inviteUser(emailRaw: string): Promise<InviteResult> {
 
   const link = inviteLink(token as string);
   const name = await workspaceName(supabase, membership.workspace_id);
-  const emailed = await sendInviteEmail(email, link, name);
-  return { ok: true, link, emailed };
+  const result = await sendInviteEmail(email, link, name);
+  if (!result.ok) return { ok: false, error: result.error };
+  return { ok: true };
 }
 
 /** Regenerate an invitation's token + expiry and re-send. Admin-only in DB. */
@@ -104,8 +107,9 @@ export async function resendInvitation(
 
   const link = inviteLink(token as string);
   const name = await workspaceName(supabase, membership.workspace_id);
-  const emailed = await sendInviteEmail(email, link, name);
-  return { ok: true, link, emailed };
+  const result = await sendInviteEmail(email, link, name);
+  if (!result.ok) return { ok: false, error: result.error };
+  return { ok: true };
 }
 
 /** Cancel a pending invitation (status -> revoked). Admin-only in DB. */
