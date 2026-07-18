@@ -21,3 +21,11 @@ All notable changes to this project are documented in this file.
 - Sign up screen heading changed from "Create account" to "Welcome", so it no longer implies a
   returning user. The Sign in screen is unchanged ("Welcome back").
   - `src/app/(auth)/signup/page.tsx`
+
+### Data
+- Removed all pre-launch development/testing data from the database and Storage: 8 folders
+  (`ihome`, `5248`, `training`, `shop`, `6656`×2, `New folder`, `New fo`), 4 entries, and 21
+  uploaded photos (~30.7 MB in the `folder-photos` bucket) — all created manually while building
+  and testing the app, none seeded by any script. The account, its workspace, and workspace
+  membership were preserved untouched. No schema, migration, or application code changed. The
+  app now opens to zero folders — a clean baseline for a first real user.
