@@ -297,6 +297,7 @@ Every `git push` to `main` triggers a new **production** build on Vercel automat
   5. `005_invitation_flow.sql`
   6. `006_folder_items.sql`
   7. `007_invitation_deletion.sql`
+  8. `008_auto_confirm_invited_users.sql`
 
   Run them **in order, in full**, in the SQL editor when setting up a new Supabase project.
 - Access control is enforced by **Row Level Security** policies defined in these migrations —
@@ -430,10 +431,18 @@ This rules out the browser simply reusing a previously cached page/response.
 
 ## Login issues
 
-- **Signup works but login says invalid credentials / stuck on "confirm your email":** in
-  Supabase Dashboard → Authentication → Providers → Email, the "Confirm email" toggle may be on.
-  For local testing convenience it's common to disable it; re-enable it before treating this as a
-  production-ready app.
+- **Signup works but login says "Email not confirmed":** Supabase Dashboard → Authentication →
+  Providers → Email → "Confirm email" is on for this project, and Supabase's own built-in mailer
+  (not the app's Resend integration, which only sends invitation emails) sent a confirmation email
+  that hasn't been clicked yet.
+  - **Invited users are unaffected by this** — migration `008_auto_confirm_invited_users.sql` adds
+    a trigger that auto-confirms a new signup's email the moment it's created, but only when that
+    email matches a currently pending, non-expired invitation. The global "Confirm email" setting
+    is intentionally left untouched; a direct signup with no matching invitation still requires
+    normal confirmation.
+  - If a *non-invited* user reports this, that's expected behavior, not a bug — direct signups
+    (e.g. the very first admin setting up their own workspace) still go through Supabase's normal
+    email confirmation flow.
 - **Logged in but immediately redirected back to `/login`:** check that `src/middleware.ts` is
   actually running (matcher config) and that cookies are being set — this usually means the
   Supabase env vars are wrong/missing (session refresh silently fails).

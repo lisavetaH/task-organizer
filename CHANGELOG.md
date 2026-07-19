@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## 2026-07-19
+
+### Fixed
+- Invited users signing up to accept a workspace invitation were left stuck
+  at "Email not confirmed" on login, because Supabase's project-wide
+  "Confirm email" setting requires clicking a separate confirmation email
+  (sent by Supabase's own built-in mailer, unrelated to the app's Resend
+  integration) before the account can log in. The invitation token itself
+  already establishes the email is legitimate, so this was pure friction.
+  - `supabase/migrations/008_auto_confirm_invited_users.sql` — new trigger
+    on `auth.users` that auto-confirms a new signup's email only when it
+    matches a currently pending, non-expired invitation. The global
+    "Confirm email" setting is untouched; direct (non-invited) signups are
+    unaffected and still require normal confirmation.
+
 ## 2026-07-18
 
 ### Added
