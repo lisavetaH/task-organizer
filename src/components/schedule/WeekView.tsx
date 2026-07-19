@@ -2,7 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { scheduledItemsInRange, type ScheduledItem } from "@/lib/schedule";
+import {
+  scheduledItemsInRange,
+  foldersUserCanComplete,
+  type ScheduledItem,
+} from "@/lib/schedule";
+import { setItemCompleted } from "@/lib/items";
 import {
   todayLocal,
   startOfWeek,
@@ -20,6 +25,9 @@ export function WeekView({ workspaceId }: { workspaceId: string }) {
   const today = useMemo(() => todayLocal(), []);
   const [weekStart, setWeekStart] = useState(() => startOfWeek(todayLocal()));
   const [items, setItems] = useState<ScheduledItem[] | null>(null);
+  const [completableFolderIds, setCompletableFolderIds] = useState<Set<string>>(
+    new Set()
+  );
   const [error, setError] = useState<string | null>(null);
 
   const days = useMemo(
@@ -30,12 +38,36 @@ export function WeekView({ workspaceId }: { workspaceId: string }) {
   useEffect(() => {
     setItems(null);
     scheduledItemsInRange(workspaceId, ymd(days[0]), ymd(days[6]))
-      .then(setItems)
+      .then(async (rows) => {
+        setItems(rows);
+        setCompletableFolderIds(
+          await foldersUserCanComplete(rows.map((r) => r.folder_id))
+        );
+      })
       .catch((e) => {
         setError(e instanceof Error ? e.message : "Could not load.");
         setItems([]);
       });
   }, [workspaceId, days]);
+
+  async function toggleComplete(item: ScheduledItem) {
+    const done = !!item.completed_at;
+    setItems((prev) =>
+      (prev ?? []).map((i) =>
+        i.id === item.id
+          ? { ...i, completed_at: done ? null : new Date().toISOString() }
+          : i
+      )
+    );
+    try {
+      await setItemCompleted(item.id, !done);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not update.");
+      setItems((prev) =>
+        (prev ?? []).map((i) => (i.id === item.id ? item : i))
+      );
+    }
+  }
 
   const byDay = useMemo(() => {
     const m = new Map<string, ScheduledItem[]>();
@@ -107,7 +139,12 @@ export function WeekView({ workspaceId }: { workspaceId: string }) {
                 {dayItems.length > 0 ? (
                   <ul className="divide-y divide-gray-100">
                     {dayItems.map((it) => (
-                      <ScheduledRow key={it.id} item={it} />
+                      <ScheduledRow
+                        key={it.id}
+                        item={it}
+                        onToggleComplete={toggleComplete}
+                        canComplete={completableFolderIds.has(it.folder_id)}
+                      />
                     ))}
                   </ul>
                 ) : (

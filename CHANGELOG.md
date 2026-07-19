@@ -4,7 +4,54 @@ All notable changes to this project are documented in this file.
 
 ## 2026-07-19
 
+### Added
+- Replaced the flat 2-tier role model (admin/worker) with a 3-tier model —
+  **Owner / Administrator / Member** — cleanly separated from folder access
+  (**Full / Selected**, "None" removed — it had no real business value and
+  Selected mode is now fully functional). Owner is unique per workspace and
+  protected: cannot be removed or demoted, and only the Owner can
+  promote/demote Administrators or transfer ownership. Administrators manage
+  folders, tasks, invitations, and plain members, but cannot touch the Owner.
+  - `supabase/migrations/009_role_model_and_permissions.sql` — role check
+    constraints, data migration for existing rows, `is_workspace_owner()`,
+    rewritten `change_member_role`/`remove_workspace_member`, new
+    `transfer_ownership` RPC, and a reverted `folders_select` policy so
+    Selected-mode members no longer see folders they aren't assigned to at
+    all (previously, migration 003 made folder names visible to every
+    member regardless of access — deliberately reversed per this milestone).
+  - New "Selected" folder-access flow: choosing it opens a modal folder
+    picker (`FolderPickerModal.tsx`) with a checkbox per folder instead of
+    the old inline list; saves immediately.
+  - New role-management controls on Users & Access (Owner-only): promote/
+    demote between Administrator and Member, and a confirmed "Make owner"
+    ownership transfer. Remove-member respects the same hierarchy
+    server-side, not just via hidden buttons.
+- Task completion checkboxes now work from **Today** and **Week**, not just
+  inside a folder — `ScheduledRow.tsx` gained the same interactive checkbox
+  `ItemCard.tsx` already had; a new `foldersUserCanComplete()` helper
+  (`src/lib/schedule.ts`) resolves per-folder completion permission across
+  the multiple folders a schedule view can span.
+- Existing accounts with the placeholder display name "New User" (see the
+  `handle_new_user` fallback in migration 001) are now prompted once, right
+  after login, to set a real name — `SetDisplayNamePrompt.tsx`, using the
+  profile table's existing self-update RLS policy (no RLS change needed).
+  The "(you)" indicator next to your own name in Users & Access is now a
+  small, separately styled "(You)" badge instead of being blended into the
+  name text.
+
 ### Fixed
+- A folder member with only "complete" permission (no "edit") could rewrite
+  any field on a task — title, body, schedule, pin state — not just tick the
+  completion box, because the `folder_items` update RLS policy only checked
+  whether *some* editable permission existed on the row, not which columns
+  were actually changing. Found live during this milestone's production
+  verification pass (a throwaway Selected-access test account, granted only
+  `can_complete_tasks`, successfully overwrote a task's title via a direct
+  API call) and fixed the same day, not left for a follow-up.
+  - `supabase/migrations/010_enforce_task_edit_permission.sql` — extends the
+    existing `protect_item_update()` trigger (already responsible for
+    deriving `completed_by` server-side) to also reject any change to a
+    non-completion column unless the caller has `edit` folder permission.
 - Invited users signing up to accept a workspace invitation were left stuck
   at "Email not confirmed" on login, because Supabase's project-wide
   "Confirm email" setting requires clicking a separate confirmation email

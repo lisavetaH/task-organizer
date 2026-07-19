@@ -1,4 +1,14 @@
-export type Role = "admin" | "worker";
+export type Role = "owner" | "admin" | "member";
+
+/** Owner and Administrator both get full workspace-management access. */
+export function isWorkspaceAdmin(role: Role): boolean {
+  return role === "owner" || role === "admin";
+}
+
+/** Only the Owner can promote/demote Administrators, transfer ownership, etc. */
+export function isWorkspaceOwner(role: Role): boolean {
+  return role === "owner";
+}
 
 export interface Folder {
   id: string;

@@ -1,7 +1,12 @@
 import Link from "next/link";
 import { ChevronLeft, ShieldAlert } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { FOLDER_METADATA_COLUMNS, type Folder, type Membership } from "@/lib/types";
+import {
+  FOLDER_METADATA_COLUMNS,
+  isWorkspaceAdmin,
+  type Folder,
+  type Membership,
+} from "@/lib/types";
 import type { Invitation } from "@/lib/invitations";
 import { UserAccessManager, type WorkspaceUser } from "@/components/users/UserAccessManager";
 
@@ -23,7 +28,7 @@ export default async function UsersPage() {
 
   // Admin-only screen. Non-admins get a clear notice (defense in depth — every
   // mutating RPC also re-checks admin status server-side).
-  if (!membership || membership.role !== "admin") {
+  if (!membership || !isWorkspaceAdmin(membership.role)) {
     return (
       <main>
         <header className="sticky top-0 z-10 flex items-center gap-2 border-b border-gray-200 bg-white/90 px-2 py-3 backdrop-blur">
@@ -122,6 +127,7 @@ export default async function UsersPage() {
       folders={folders}
       initialSelectedByUser={selectedByUser}
       invitations={invitations}
+      viewerRole={membership.role}
     />
   );
 }

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Check, Trash2 } from "lucide-react";
+import { Check, Circle, Trash2 } from "lucide-react";
 import type { ScheduledItem } from "@/lib/schedule";
 import { formatTime } from "@/lib/dates";
 import { resolveFolderIcon } from "@/lib/folder-icons";
@@ -11,12 +11,17 @@ export function ScheduledRow({
   item,
   dateLabel,
   onRemove,
+  onToggleComplete,
+  canComplete,
 }: {
   item: ScheduledItem;
   /** e.g. "July 19" — the currently selected calendar day, for the confirm prompt. */
   dateLabel?: string;
   /** Omit to render without a delete affordance (e.g. Today/Week views). */
   onRemove?: (itemId: string) => void;
+  /** Omit to render a static (non-interactive) completion indicator. */
+  onToggleComplete?: (item: ScheduledItem) => void;
+  canComplete?: boolean;
 }) {
   const Icon = resolveFolderIcon(item.folder_icon);
   const done = !!item.completed_at;
@@ -26,6 +31,22 @@ export function ScheduledRow({
 
   return (
     <li className="flex items-center">
+      {onToggleComplete ? (
+        <button
+          type="button"
+          onClick={() => onToggleComplete(item)}
+          disabled={!canComplete}
+          aria-label={done ? "Mark not done" : "Mark done"}
+          className={`ml-3 grid h-6 w-6 shrink-0 place-items-center rounded-full border ${
+            done
+              ? "border-emerald-500 bg-emerald-500 text-white"
+              : "border-gray-300 text-transparent"
+          } disabled:opacity-40`}
+        >
+          {done ? <Check className="h-4 w-4" /> : <Circle className="h-3 w-3" />}
+        </button>
+      ) : null}
+
       <Link
         href={`/folders/${item.folder_id}`}
         className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 active:bg-gray-50"
@@ -52,7 +73,9 @@ export function ScheduledRow({
         {time ? (
           <span className="shrink-0 text-xs font-medium text-gray-500">{time}</span>
         ) : null}
-        {done ? <Check className="h-4 w-4 shrink-0 text-emerald-500" /> : null}
+        {!onToggleComplete && done ? (
+          <Check className="h-4 w-4 shrink-0 text-emerald-500" />
+        ) : null}
       </Link>
 
       {onRemove ? (

@@ -2,16 +2,15 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ChevronLeft, Check, ShieldCheck } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ChevronLeft, ShieldCheck, Crown, Trash2 } from "lucide-react";
 import type { Folder, Role } from "@/lib/types";
+import { isWorkspaceAdmin, isWorkspaceOwner } from "@/lib/types";
 import type { Invitation } from "@/lib/invitations";
-import { resolveFolderIcon } from "@/lib/folder-icons";
 import { InvitationsPanel } from "./InvitationsPanel";
-import {
-  setAllFoldersAccess,
-  setFolderAccess,
-  clearAllFolderAccess,
-} from "@/lib/access";
+import { setAllFoldersAccess, setFolderAccess } from "@/lib/access";
+import { changeMemberRole, removeMember, transferOwnership } from "@/lib/members-actions";
+import { FolderPickerModal } from "./FolderPickerModal";
 
 export interface WorkspaceUser {
   user_id: string;
@@ -21,12 +20,10 @@ export interface WorkspaceUser {
   is_self: boolean;
 }
 
-type Mode = "all" | "selected" | "none";
+type FolderAccessMode = "full" | "selected";
 
-function deriveMode(allAccess: boolean, selectedCount: number): Mode {
-  if (allAccess) return "all";
-  if (selectedCount > 0) return "selected";
-  return "none";
+function deriveMode(allAccess: boolean): FolderAccessMode {
+  return allAccess ? "full" : "selected";
 }
 
 export function UserAccessManager({
@@ -35,12 +32,14 @@ export function UserAccessManager({
   folders,
   initialSelectedByUser,
   invitations,
+  viewerRole,
 }: {
   workspaceId: string;
   users: WorkspaceUser[];
   folders: Folder[];
   initialSelectedByUser: Record<string, string[]>;
   invitations: Invitation[];
+  viewerRole: Role;
 }) {
   return (
     <main>
@@ -65,13 +64,14 @@ export function UserAccessManager({
             workspaceId={workspaceId}
             folders={folders}
             initialSelected={initialSelectedByUser[u.user_id] ?? []}
+            viewerRole={viewerRole}
           />
         ))}
       </ul>
 
       {users.length <= 1 ? (
         <p className="px-6 py-8 text-center text-sm text-gray-400">
-          You&apos;re the only member so far. Invite workers to assign folder
+          You&apos;re the only member so far. Invite members to assign folder
           access.
         </p>
       ) : null}
@@ -79,96 +79,156 @@ export function UserAccessManager({
   );
 }
 
+function RoleBadge({ role }: { role: Role }) {
+  if (role === "owner") {
+    return (
+      <span className="mt-0.5 flex items-center gap-1 text-sm text-amber-600">
+        <Crown className="h-4 w-4" />
+        Owner
+      </span>
+    );
+  }
+  if (role === "admin") {
+    return (
+      <span className="mt-0.5 flex items-center gap-1 text-sm text-brand">
+        <ShieldCheck className="h-4 w-4" />
+        Administrator
+      </span>
+    );
+  }
+  return <span className="mt-0.5 block text-sm text-gray-500">Member</span>;
+}
+
 function UserRow({
   user,
   workspaceId,
   folders,
   initialSelected,
+  viewerRole,
 }: {
   user: WorkspaceUser;
   workspaceId: string;
   folders: Folder[];
   initialSelected: string[];
+  viewerRole: Role;
 }) {
+  const router = useRouter();
   const [allAccess, setAllAccess] = useState(user.all_folders_access);
   const [selected, setSelected] = useState<Set<string>>(
     new Set(initialSelected)
   );
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const mode = deriveMode(allAccess, selected.size);
+  const mode = deriveMode(allAccess);
+  const viewerIsOwner = isWorkspaceOwner(viewerRole);
+  const viewerIsAdmin = isWorkspaceAdmin(viewerRole);
+  const targetIsAdminTier = isWorkspaceAdmin(user.role);
 
-  // Admins always have full access via their role — not editable here.
-  if (user.role === "admin") {
-    return (
-      <li className="flex items-center gap-3 px-4 py-4">
-        <Avatar name={user.full_name} />
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-base font-medium text-gray-900">
-            {user.full_name}
-            {user.is_self ? " (you)" : ""}
-          </p>
-          <p className="mt-0.5 flex items-center gap-1 text-sm text-brand">
-            <ShieldCheck className="h-4 w-4" />
-            Administrator — full access
-          </p>
-        </div>
-      </li>
-    );
+  // Owner can remove admins or members (not themself). Admin can only
+  // remove plain members. The database re-checks this regardless of what
+  // renders here (requirement 9) — this is convenience only.
+  const canRemove =
+    !user.is_self &&
+    user.role !== "owner" &&
+    (viewerIsOwner || (viewerIsAdmin && user.role === "member"));
+
+  // Only the owner may promote/demote between Administrator and Member, or
+  // hand off ownership. Never shown for the owner's own row.
+  const canManageRole = viewerIsOwner && user.role !== "owner" && !user.is_self;
+
+  async function handleRoleChange(newRole: "admin" | "member") {
+    if (busy || user.role === newRole) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await changeMemberRole(workspaceId, user.user_id, newRole);
+      if (!res.ok) throw new Error(res.error);
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not change role.");
+    } finally {
+      setBusy(false);
+    }
   }
 
-  async function changeMode(next: Mode) {
+  async function handleTransferOwnership() {
+    if (busy) return;
+    if (
+      !confirm(
+        `Make ${user.full_name} the workspace owner? You will become an administrator and can no longer undo this yourself.`
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await transferOwnership(workspaceId, user.user_id);
+      if (!res.ok) throw new Error(res.error);
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not transfer ownership.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRemove() {
+    if (busy) return;
+    if (!confirm(`Remove ${user.full_name} from this workspace?`)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await removeMember(workspaceId, user.user_id);
+      if (!res.ok) throw new Error(res.error);
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not remove member.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function changeMode(next: FolderAccessMode) {
     if (busy || next === mode) return;
+    if (next === "selected") {
+      setPickerOpen(true);
+      return;
+    }
     setBusy(true);
     setError(null);
     const prevAll = allAccess;
-    const prevSelected = new Set(selected);
     try {
-      if (next === "all") {
-        await setAllFoldersAccess(workspaceId, user.user_id, true);
-        setAllAccess(true);
-        setSelected(new Set()); // server clears per-folder rows
-      } else if (next === "none") {
-        await clearAllFolderAccess(workspaceId, user.user_id);
-        setAllAccess(false);
-        setSelected(new Set());
-      } else {
-        // selected: turn off full access; admin then picks folders below
-        await setAllFoldersAccess(workspaceId, user.user_id, false);
-        setAllAccess(false);
-        // keep whatever folder rows already existed (usually none)
-      }
+      await setAllFoldersAccess(workspaceId, user.user_id, true);
+      setAllAccess(true);
+      setSelected(new Set()); // server clears per-folder rows
     } catch (e) {
       setAllAccess(prevAll);
-      setSelected(prevSelected);
       setError(e instanceof Error ? e.message : "Could not update access.");
     } finally {
       setBusy(false);
     }
   }
 
-  async function toggleFolder(folderId: string) {
-    if (busy) return;
-    const enable = !selected.has(folderId);
-    setBusy(true);
-    setError(null);
-    const prev = new Set(selected);
-    // optimistic
-    setSelected((s) => {
-      const n = new Set(s);
-      if (enable) n.add(folderId);
-      else n.delete(folderId);
-      return n;
-    });
-    try {
-      await setFolderAccess(folderId, user.user_id, enable);
-    } catch (e) {
-      setSelected(prev);
-      setError(e instanceof Error ? e.message : "Could not update folder.");
-    } finally {
-      setBusy(false);
+  async function savePickedFolders(selectedIds: string[]) {
+    const nextSelected = new Set(selectedIds);
+    const toEnable = selectedIds.filter((id) => !selected.has(id));
+    const toDisable = Array.from(selected).filter((id) => !nextSelected.has(id));
+
+    if (allAccess) {
+      await setAllFoldersAccess(workspaceId, user.user_id, false);
     }
+    await Promise.all([
+      ...toEnable.map((id) => setFolderAccess(id, user.user_id, true)),
+      ...toDisable.map((id) => setFolderAccess(id, user.user_id, false)),
+    ]);
+
+    setAllAccess(false);
+    setSelected(nextSelected);
+    setPickerOpen(false);
+    router.refresh();
   }
 
   return (
@@ -178,34 +238,59 @@ function UserRow({
         <div className="min-w-0 flex-1">
           <p className="truncate text-base font-medium text-gray-900">
             {user.full_name}
+            {user.is_self ? (
+              <span className="ml-1.5 text-xs font-normal text-gray-400">(You)</span>
+            ) : null}
           </p>
-          <p className="mt-0.5 text-sm text-gray-500">{statusLabel(mode, selected.size)}</p>
+          <RoleBadge role={user.role} />
         </div>
+        {canRemove ? (
+          <button
+            type="button"
+            onClick={handleRemove}
+            disabled={busy}
+            aria-label={`Remove ${user.full_name}`}
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-gray-400 active:bg-red-50 active:text-red-500 disabled:opacity-60"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        ) : null}
       </div>
 
-      {/* Mode selector */}
-      <div
-        role="group"
-        aria-label="Access mode"
-        className="mt-3 grid grid-cols-3 gap-1 rounded-xl bg-gray-100 p-1"
-      >
-        {(["all", "selected", "none"] as Mode[]).map((m) => (
-          <button
-            key={m}
-            type="button"
-            onClick={() => changeMode(m)}
-            disabled={busy}
-            aria-pressed={mode === m}
-            className={`rounded-lg py-2 text-sm font-medium transition-colors disabled:opacity-60 ${
-              mode === m
-                ? "bg-white text-gray-900 shadow-sm"
-                : "text-gray-500 active:text-gray-700"
-            }`}
+      {canManageRole ? (
+        <div className="mt-3 flex items-center gap-2">
+          <div
+            role="group"
+            aria-label={`Role for ${user.full_name}`}
+            className="grid flex-1 grid-cols-2 gap-1 rounded-xl bg-gray-100 p-1"
           >
-            {m === "all" ? "Full" : m === "selected" ? "Selected" : "None"}
+            {(["admin", "member"] as const).map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => handleRoleChange(r)}
+                disabled={busy}
+                aria-pressed={user.role === r}
+                className={`rounded-lg py-2 text-sm font-medium transition-colors disabled:opacity-60 ${
+                  user.role === r
+                    ? "bg-white text-gray-900 shadow-sm"
+                    : "text-gray-500 active:text-gray-700"
+                }`}
+              >
+                {r === "admin" ? "Administrator" : "Member"}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={handleTransferOwnership}
+            disabled={busy}
+            className="shrink-0 rounded-xl border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 active:bg-gray-50 disabled:opacity-60"
+          >
+            Make owner
           </button>
-        ))}
-      </div>
+        </div>
+      ) : null}
 
       {error ? (
         <p className="mt-2 text-sm text-red-600" role="alert">
@@ -213,64 +298,61 @@ function UserRow({
         </p>
       ) : null}
 
-      {/* Folder checklist (Selected mode only) */}
-      {mode === "selected" ? (
-        <div className="mt-3 overflow-hidden rounded-xl border border-gray-200">
-          {folders.length === 0 ? (
-            <p className="px-4 py-4 text-sm text-gray-400">
-              No folders exist yet.
-            </p>
-          ) : (
-            <ul className="divide-y divide-gray-100">
-              {folders.map((f) => {
-                const Icon = resolveFolderIcon(f.icon);
-                const on = selected.has(f.id);
-                return (
-                  <li key={f.id}>
-                    <button
-                      type="button"
-                      onClick={() => toggleFolder(f.id)}
-                      disabled={busy}
-                      className="flex w-full items-center gap-3 px-4 py-3 text-left active:bg-gray-50 disabled:opacity-60"
-                    >
-                      <span
-                        className="grid h-8 w-8 shrink-0 place-items-center rounded-lg"
-                        style={{
-                          backgroundColor: f.color ? `${f.color}1a` : "#f3f4f6",
-                          color: f.color ?? "#4b5563",
-                        }}
-                      >
-                        <Icon className="h-4 w-4" />
-                      </span>
-                      <span className="flex-1 truncate text-base text-gray-900">
-                        {f.name}
-                      </span>
-                      <span
-                        className={`grid h-6 w-6 shrink-0 place-items-center rounded-md border ${
-                          on
-                            ? "border-brand bg-brand text-white"
-                            : "border-gray-300 text-transparent"
-                        }`}
-                      >
-                        <Check className="h-4 w-4" />
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
+      {targetIsAdminTier ? (
+        <p className="mt-3 text-sm text-gray-500">Full access (via role)</p>
+      ) : (
+        <>
+          {/* Folder access mode: Full / Selected only — no "None" (requirement 2) */}
+          <div
+            role="group"
+            aria-label="Folder access"
+            className="mt-3 grid grid-cols-2 gap-1 rounded-xl bg-gray-100 p-1"
+          >
+            {(["full", "selected"] as FolderAccessMode[]).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => changeMode(m)}
+                disabled={busy}
+                aria-pressed={mode === m}
+                className={`rounded-lg py-2 text-sm font-medium transition-colors disabled:opacity-60 ${
+                  mode === m
+                    ? "bg-white text-gray-900 shadow-sm"
+                    : "text-gray-500 active:text-gray-700"
+                }`}
+              >
+                {m === "full" ? "Full" : "Selected"}
+              </button>
+            ))}
+          </div>
+          <p className="mt-1.5 text-sm text-gray-500">
+            {mode === "full"
+              ? "Full access"
+              : `Selected folders (${selected.size})`}
+          </p>
+          {mode === "selected" ? (
+            <button
+              type="button"
+              onClick={() => setPickerOpen(true)}
+              disabled={busy}
+              className="mt-2 text-sm font-medium text-brand active:text-brand-dark disabled:opacity-60"
+            >
+              Choose folders
+            </button>
+          ) : null}
+        </>
+      )}
+
+      {pickerOpen ? (
+        <FolderPickerModal
+          folders={folders}
+          initiallySelected={Array.from(selected)}
+          onCancel={() => setPickerOpen(false)}
+          onSave={savePickedFolders}
+        />
       ) : null}
     </li>
   );
-}
-
-function statusLabel(mode: Mode, count: number): string {
-  if (mode === "all") return "Full access to all folders";
-  if (mode === "selected")
-    return `Access to ${count} folder${count === 1 ? "" : "s"}`;
-  return "No folder access";
 }
 
 function Avatar({ name }: { name: string }) {

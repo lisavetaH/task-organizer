@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { sendInviteEmail } from "@/lib/email";
-import type { Membership } from "@/lib/types";
+import { isWorkspaceAdmin, type Membership } from "@/lib/types";
 
 export type InviteResult =
   | { ok: true }
@@ -50,10 +50,11 @@ async function workspaceName(
 }
 
 /**
- * Create (or refresh via the DB's stale-expiry logic) a worker invitation for
+ * Create (or refresh via the DB's stale-expiry logic) a member invitation for
  * an email, then email a secure link. Admin status is enforced inside
  * create_invitation (is_workspace_admin) — the check here is convenience only.
- * Role is always 'worker'; invited users are never admins.
+ * Role is always 'member'; promotion to Administrator happens afterward via
+ * the Owner's role selector on the Users & Access page.
  */
 export async function inviteUser(emailRaw: string): Promise<InviteResult> {
   const email = emailRaw.trim().toLowerCase();
@@ -62,14 +63,14 @@ export async function inviteUser(emailRaw: string): Promise<InviteResult> {
   }
 
   const { supabase, membership } = await resolveWorkspace();
-  if (!membership || membership.role !== "admin") {
+  if (!membership || !isWorkspaceAdmin(membership.role)) {
     return { ok: false, error: "Only administrators can invite users." };
   }
 
   const { data: token, error } = await supabase.rpc("create_invitation", {
     p_workspace_id: membership.workspace_id,
     p_email: email,
-    p_role: "worker",
+    p_role: "member",
   });
 
   if (error) {
@@ -100,7 +101,7 @@ export async function resendInvitation(
   email: string
 ): Promise<InviteResult> {
   const { supabase, membership } = await resolveWorkspace();
-  if (!membership || membership.role !== "admin") {
+  if (!membership || !isWorkspaceAdmin(membership.role)) {
     return { ok: false, error: "Only administrators can resend invitations." };
   }
 

@@ -129,7 +129,7 @@ export function AcceptInvite({
     <Shell title={`Join ${preview.workspace_name}`}>
       <p>
         You&apos;re signed in as <b>{preview.email}</b>. Accept to join the
-        workspace as a worker.
+        workspace as a member.
       </p>
       {error ? (
         <p className="mt-3 text-sm text-red-600" role="alert">

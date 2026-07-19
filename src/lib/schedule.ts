@@ -36,7 +36,9 @@ export async function scheduledItemsInRange(
   const rows = (items ?? []) as FolderItem[];
   if (rows.length === 0) return [];
 
-  // Attach folder metadata (visible to any member via migration 003).
+  // Attach folder metadata. Every folder_id here already passed items_select's
+  // folder_permission(...,'view') check (that's why the item was returned at
+  // all), so this folders query — gated by the same permission — succeeds too.
   const folderIds = Array.from(new Set(rows.map((r) => r.folder_id)));
   const { data: folders } = await supabase
     .from("folders")
@@ -60,4 +62,27 @@ export async function scheduledItemsInRange(
     folder_color: meta.get(r.folder_id)?.color ?? null,
     folder_icon: meta.get(r.folder_id)?.icon ?? null,
   }));
+}
+
+/**
+ * Resolves 'complete' permission per distinct folder for a set of scheduled
+ * items (Today/Week span multiple folders, unlike a single folder view where
+ * this is resolved once server-side). Same Promise.all + folder_permission
+ * RPC batching pattern as foldersUserCanCreateIn() in src/lib/folders.ts.
+ */
+export async function foldersUserCanComplete(
+  folderIds: string[]
+): Promise<Set<string>> {
+  const supabase = createClient();
+  const unique = Array.from(new Set(folderIds));
+  if (unique.length === 0) return new Set();
+
+  const checks = await Promise.all(
+    unique.map((id) =>
+      supabase
+        .rpc("folder_permission", { f_id: id, perm: "complete" })
+        .then(({ data }) => (data ? id : null))
+    )
+  );
+  return new Set(checks.filter((id): id is string => id !== null));
 }

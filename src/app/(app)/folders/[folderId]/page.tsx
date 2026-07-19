@@ -56,8 +56,9 @@ export default async function FolderDetailPage({
 }) {
   const supabase = createClient();
 
-  // Metadata is visible to any workspace member (migration 003). Selecting
-  // only safe columns — never contents, never created_by.
+  // Metadata is only visible to users with folder_permission(id,'view') —
+  // migration 009 reverted 003's blanket workspace-member visibility.
+  // Selecting only safe columns — never contents, never created_by.
   const { data: folder } = await supabase
     .from("folders")
     .select(FOLDER_METADATA_COLUMNS)
@@ -65,8 +66,8 @@ export default async function FolderDetailPage({
     .is("archived_at", null)
     .maybeSingle<Folder>();
 
-  // No metadata row -> folder isn't in a workspace this user belongs to.
-  // Show the locked screen (not a generic not-found), per spec.
+  // No metadata row -> this user has no access to the folder at all (or it
+  // doesn't exist). Show the locked screen (not a generic not-found), per spec.
   if (!folder) {
     return (
       <main>

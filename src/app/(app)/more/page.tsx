@@ -2,7 +2,7 @@ import Link from "next/link";
 import { LogOut, Users, ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { logOut } from "@/lib/auth-actions";
-import type { Membership } from "@/lib/types";
+import { isWorkspaceAdmin, type Membership } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +19,7 @@ export default async function MorePage() {
     .limit(1)
     .maybeSingle<Membership>();
 
-  const isAdmin = membership?.role === "admin";
+  const isAdmin = membership ? isWorkspaceAdmin(membership.role) : false;
 
   return (
     <main>

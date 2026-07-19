@@ -6,7 +6,7 @@ import { createWorkspace } from "@/lib/folders";
 
 /**
  * Shown when the signed-in user belongs to no workspace yet. Creating one
- * makes them its administrator (via the create_workspace RPC) and starts a
+ * makes them its owner (via the create_workspace RPC) and starts a
  * completely empty filing cabinet — no seeded folders.
  */
 export function CreateWorkspace() {
