@@ -51,8 +51,18 @@ Task Organizer is a shared task/organizer app with:
 - **Server Components fetch data server-side** (e.g. `src/app/(app)/today/page.tsx` queries
   Supabase directly), then pass results down to **Client Components** (marked `"use client"`,
   e.g. `TodayView`) which handle interactivity, local state, and re-fetching.
+- **`supabase/functions/`** holds Supabase Edge Functions (Deno) — currently just
+  `delete-account`, which calls the official Supabase Admin API (`auth.admin.deleteUser`) to
+  permanently delete a user's own account. This is the one operation in the app that needs the
+  `service_role` key; it's never used anywhere else, and never leaves Supabase's own
+  infrastructure — Supabase auto-injects `SUPABASE_SERVICE_ROLE_KEY` into every Edge Function's
+  runtime, so it's never an env var in this repo or in Vercel.
 - **Deployment**: pushing to `main` on GitHub automatically triggers a production build on
-  Vercel — there is no separate CI/CD pipeline to maintain.
+  Vercel for the Next.js app — there is no separate CI/CD pipeline to maintain. Edge Functions
+  are **not** part of that pipeline; they deploy independently to Supabase (currently via the
+  Supabase MCP tooling / `supabase functions deploy` — there's no GitHub Action wiring them up
+  yet). Changing `supabase/functions/delete-account/index.ts` requires a manual redeploy to
+  Supabase in addition to the normal `git push`.
 
 ---
 
@@ -301,8 +311,11 @@ Every `git push` to `main` triggers a new **production** build on Vercel automat
   9. `009_role_model_and_permissions.sql`
   10. `010_enforce_task_edit_permission.sql`
   11. `011_account_deletion.sql`
+  12. `012_edge_function_account_deletion.sql`
 
-  Run them **in order, in full**, in the SQL editor when setting up a new Supabase project.
+  Run them **in order, in full**, in the SQL editor when setting up a new Supabase project. `012`
+  also requires deploying `supabase/functions/delete-account` (see below) — the migration alone
+  is not sufficient for account deletion to work.
 - Access control is enforced by **Row Level Security** policies defined in these migrations —
   not by application-level checks. Every table a user can reach has RLS policies scoping rows to
   their workspace/role.
@@ -314,6 +327,17 @@ Every `git push` to `main` triggers a new **production** build on Vercel automat
   memberships, and invitations it sent (or that were pending to its own email) are removed. An
   Owner cannot delete their account while they still own a workspace — they must transfer
   ownership or delete the workspace first (both enforced in the database, not just the UI).
+  - The actual account removal goes through the **Supabase Admin API**
+    (`auth.admin.deleteUser`), called from the `delete-account` Edge Function
+    (`supabase/functions/delete-account/index.ts`) — not a direct SQL `DELETE FROM auth.users`.
+    The Edge Function first calls `prepare_own_account_deletion()` (migration 012) using the
+    caller's *own* JWT — this is where the Owner-block check and invitation cleanup happen,
+    fully RLS/database-enforced, before any elevated privilege is used. Only after that succeeds
+    does it call the Admin API, using the `service_role` key Supabase injects automatically into
+    the Edge Function's runtime (never an env var in this repo or in Vercel). This is the
+    documented, version-stable way Supabase recommends deleting a user, and it produces a real
+    `user_deleted` audit event in the project's Auth Logs — a direct SQL delete from `postgres`
+    cannot do either of those things, since it bypasses GoTrue's own application layer entirely.
 
 ---
 

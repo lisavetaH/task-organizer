@@ -75,6 +75,41 @@ All notable changes to this project are documented in this file.
   small, separately styled "(You)" badge instead of being blended into the
   name text.
 
+### Changed
+- Replaced the "Delete my account" flow's account-removal step with the
+  official Supabase architecture. The version shipped earlier today deleted
+  `auth.users` directly from a `SECURITY DEFINER` SQL function — it worked
+  and was verified live, but it relied on an undocumented implementation
+  detail (the `postgres` role's grant on `auth.users`) rather than a stable
+  Supabase interface, and it bypassed GoTrue's own logging, so the
+  deletion never produced an audit trail.
+  - **New**: `supabase/functions/delete-account/index.ts` — a Supabase Edge
+    Function that calls the official `auth.admin.deleteUser()` Admin API.
+    Its `service_role` credential is Supabase's own auto-injected Edge
+    Function runtime variable — it is never an env var in this repo or in
+    Vercel, and this is the only place in the app that uses it.
+  - `supabase/migrations/012_edge_function_account_deletion.sql` — drops
+    the old `delete_own_account()` entirely and replaces it with
+    `prepare_own_account_deletion()`, which keeps the Owner-block check and
+    invitation cleanup exactly as before but no longer touches
+    `auth.users`. The Edge Function calls this RPC *using the caller's own
+    JWT* before it ever uses the service-role client, so Owner protection
+    remains fully database-enforced, not something the Edge Function
+    decides on its own.
+  - `src/lib/account-actions.ts` — `deleteOwnAccount()` now calls the Edge
+    Function over HTTPS with the caller's access token instead of invoking
+    an RPC directly; the Danger Zone UI/UX (`DangerZone.tsx`,
+    `TypeToConfirmDialog.tsx`) is unchanged.
+  - Verified live: a real `user_deleted` event now appears in the
+    project's Supabase Auth Logs (`actor_username: "service_role"`,
+    `DELETE /admin/users/{id}`, `status: 200`) — something the previous
+    direct-SQL version could never produce. Re-ran the full persona
+    checklist (Member, Administrator, Owner blocked, Owner unblocked via
+    both `transfer_ownership` and `delete_workspace`) through the new path
+    with identical results to before: content survives with `created_by`
+    set to `null`, zero orphaned records, deleted users can't sign in
+    again.
+
 ### Fixed
 - A folder member with only "complete" permission (no "edit") could rewrite
   any field on a task — title, body, schedule, pin state — not just tick the
