@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { LogOut, Users, ChevronRight } from "lucide-react";
+import { Users, ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { logOut } from "@/lib/auth-actions";
 import { isWorkspaceAdmin, type Membership } from "@/lib/types";
+import { DangerZone, type OwnedWorkspace } from "@/components/more/DangerZone";
 
 export const dynamic = "force-dynamic";
 
@@ -12,14 +12,21 @@ export default async function MorePage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { data: membership } = await supabase
+  // Every membership (not just the first) — deleting an account must
+  // correctly detect workspace ownership across all of them, not only a
+  // "primary" one.
+  const { data: memberships } = await supabase
     .from("workspace_members")
-    .select("workspace_id, role")
+    .select("workspace_id, role, workspaces(name)")
     .order("joined_at", { ascending: true })
-    .limit(1)
-    .maybeSingle<Membership>();
+    .returns<(Membership & { workspaces: { name: string } | null })[]>();
 
+  const membership = memberships?.[0];
   const isAdmin = membership ? isWorkspaceAdmin(membership.role) : false;
+
+  const ownedWorkspaces: OwnedWorkspace[] = (memberships ?? [])
+    .filter((m) => m.role === "owner")
+    .map((m) => ({ id: m.workspace_id, name: m.workspaces?.name ?? "Untitled workspace" }));
 
   return (
     <main>
@@ -54,15 +61,7 @@ export default async function MorePage() {
           </div>
         ) : null}
 
-        <form action={logOut} className="mt-6">
-          <button
-            type="submit"
-            className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-red-600 active:bg-gray-50"
-          >
-            <LogOut className="h-4 w-4" aria-hidden="true" />
-            Log out
-          </button>
-        </form>
+        <DangerZone ownedWorkspaces={ownedWorkspaces} />
       </section>
     </main>
   );

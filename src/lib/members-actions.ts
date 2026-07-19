@@ -59,3 +59,25 @@ export async function transferOwnership(
   if (error) return { ok: false, error: error.message };
   return { ok: true };
 }
+
+/**
+ * Permanently delete an entire workspace — one of the two ways an owner can
+ * unblock their own account deletion (the other is transferOwnership).
+ * Owner-only in the database (delete_workspace). The RPC returns every
+ * Storage object the workspace's items held so they can be removed here,
+ * same pattern as emptyFolderTrash/emptyExpiredTrash in items.ts.
+ */
+export async function deleteWorkspace(workspaceId: string): Promise<ActionResult> {
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("delete_workspace", {
+    p_workspace_id: workspaceId,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  const rows = (data ?? []) as { bucket: string; path: string }[];
+  const byBucket = new Map<string, string[]>();
+  for (const r of rows) (byBucket.get(r.bucket) ?? byBucket.set(r.bucket, []).get(r.bucket)!).push(r.path);
+  for (const [bucket, paths] of byBucket) await supabase.storage.from(bucket).remove(paths);
+
+  return { ok: true };
+}

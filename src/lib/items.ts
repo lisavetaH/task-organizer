@@ -55,7 +55,7 @@ async function attachMediaAndMeta(rows: FolderItem[]): Promise<FolderItemFull[]>
     attachments: a.get(r.id) ?? [],
     voice_notes: v.get(r.id) ?? [],
     is_favorite: favSet.has(r.id),
-    creator_name: nameById.get(r.created_by) ?? null,
+    creator_name: r.created_by ? nameById.get(r.created_by) ?? null : null,
     completer_name: r.completed_by ? nameById.get(r.completed_by) ?? null : null,
   }));
 }

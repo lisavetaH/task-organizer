@@ -300,11 +300,20 @@ Every `git push` to `main` triggers a new **production** build on Vercel automat
   8. `008_auto_confirm_invited_users.sql`
   9. `009_role_model_and_permissions.sql`
   10. `010_enforce_task_edit_permission.sql`
+  11. `011_account_deletion.sql`
 
   Run them **in order, in full**, in the SQL editor when setting up a new Supabase project.
 - Access control is enforced by **Row Level Security** policies defined in these migrations —
   not by application-level checks. Every table a user can reach has RLS policies scoping rows to
   their workspace/role.
+- **Account deletion semantics**: deleting your own account (More → Danger zone) never deletes
+  shared workspace content. `created_by`/`uploaded_by` columns on `workspaces`, `folders`,
+  `folder_items`, and the three `folder_item_*` media tables are nullable and `on delete set
+  null` — a folder or task another workspace member relies on survives its creator's account
+  being deleted, just with no attributed author. Only the account itself, its profile, its
+  memberships, and invitations it sent (or that were pending to its own email) are removed. An
+  Owner cannot delete their account while they still own a workspace — they must transfer
+  ownership or delete the workspace first (both enforced in the database, not just the UI).
 
 ---
 
@@ -450,6 +459,13 @@ This rules out the browser simply reusing a previously cached page/response.
   Supabase env vars are wrong/missing (session refresh silently fails).
 - **`profiles` row missing after signup:** check that migration `001_initial_schema.sql` was run
   in full — it defines the `handle_new_user` trigger that auto-creates a profile row.
+- **A manually-inserted `auth.users` row (e.g. a throwaway test account created directly via SQL)
+  fails to log in with `"Database error querying schema"` from `/auth/v1/token`:** GoTrue scans
+  several `auth.users` text columns — `confirmation_token`, `email_change`,
+  `email_change_token_new`, `email_change_token_current`, `recovery_token`, `phone_change`,
+  `phone_change_token` — into Go strings, which errors on SQL `NULL` (a real column default in
+  this schema). A normal signup through Supabase Auth always sets these to `''`; a raw `insert
+  into auth.users` must do the same explicitly, or `update` them to `''` afterward.
 
 ## Invitation email fails to send
 

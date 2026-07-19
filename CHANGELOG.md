@@ -5,6 +5,42 @@ All notable changes to this project are documented in this file.
 ## 2026-07-19
 
 ### Added
+- Permanent, production-quality "Delete my account" flow — a new **Danger
+  zone** section on the More page (Log out + a red "Delete my account"
+  button), gated behind a typed-`DELETE` confirmation dialog
+  (`TypeToConfirmDialog.tsx`, new — generic, also reused for workspace
+  deletion). Member and Administrator accounts delete the same way; an Owner
+  is blocked with a clear panel explaining they must transfer ownership or
+  delete the workspace first, listing every workspace they own by name.
+  - `supabase/migrations/011_account_deletion.sql` — new `delete_own_account()`
+    RPC (no parameters, always acts on `auth.uid()` — structurally cannot
+    target anyone else's account), DB-level-enforced owner block, and a new
+    `delete_workspace()` RPC (owner-only) since "delete the workspace" needed
+    to be a real, working option, not just words in an error message.
+  - **Deletion never destroys shared team content.** `created_by`/
+    `uploaded_by` on `workspaces`, `folders`, `folder_items`, and the three
+    `folder_item_*` media tables were `not null ... on delete restrict` —
+    meaning almost any real user's account deletion would previously have
+    hard-failed with a foreign-key violation. Brought in line with the
+    pattern already used by `completed_by`/`assigned_to`/`started_by`:
+    nullable, `on delete set null`. A folder or task another member relies
+    on survives its creator's account being deleted; only the attribution
+    clears. Verified live: deleting a test member left their folder and
+    task fully intact with `created_by = null`.
+  - Deleting `auth.users` — confirmed live that `postgres` already has
+    `DELETE`/`SELECT` privilege on it, no service-role key needed — cascades
+    through `profiles`, memberships, favorites, and Supabase's own
+    `auth.sessions`/`auth.refresh_tokens` chain, so no new session can ever
+    be started again. A still-open browser tab's *existing* access token
+    stays JWT-valid until its normal ~1hr expiry (Supabase's stateless-JWT
+    model), but returns zero data immediately since everything it could
+    read is already gone — confirmed live via the exact old token.
+  - `src/lib/account-actions.ts` (new), `src/lib/members-actions.ts`
+    (`deleteWorkspace`, storage cleanup via the same `(bucket, path)` return
+    pattern `empty_folder_trash`/`purge_expired_trash` already use),
+    `src/components/more/DangerZone.tsx` (new), `src/app/(app)/more/page.tsx`
+    (now reads every workspace membership, not just the first, to correctly
+    detect ownership for a user who belongs to more than one workspace).
 - Replaced the flat 2-tier role model (admin/worker) with a 3-tier model —
   **Owner / Administrator / Member** — cleanly separated from folder access
   (**Full / Selected**, "None" removed — it had no real business value and

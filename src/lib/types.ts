@@ -46,7 +46,9 @@ export interface FolderItem {
   position: number;
   completed_at: string | null;
   completed_by: string | null;
-  created_by: string;
+  // Nullable since migration 011: the creator's profile can be deleted
+  // (account deletion) without deleting the content they created.
+  created_by: string | null;
   created_at: string;
   updated_at: string;
   archived_at: string | null;
@@ -61,7 +63,8 @@ export interface MediaRecord {
   mime_type: string | null;
   size_bytes: number | null;
   position: number;
-  uploaded_by: string;
+  // Nullable since migration 011 — see FolderItem.created_by.
+  uploaded_by: string | null;
   created_at: string;
 }
 
