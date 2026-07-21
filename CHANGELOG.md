@@ -76,6 +76,16 @@ All notable changes to this project are documented in this file.
   name text.
 
 ### Changed
+- Redesigned the bottom navigation: each tab is now a real rounded button,
+  not just a floating icon/label pair. The active tab gets a filled
+  brand-indigo pill with a white icon and label (guaranteed high-contrast,
+  and the only accent color used — no rainbow of tab colors); inactive
+  tabs stay plain gray but show a soft gray "pressed" highlight on tap so
+  they still read as interactive. Subtle `active:scale-[0.96]` press
+  feedback and a 200ms color transition, no bounce or flashy motion.
+  - `src/components/BottomNav.tsx` — the whole pill is the tap target
+    (each `<Link>` itself carries the rounded background), so there's no
+    separate hit-area vs. visual-area mismatch.
 - Redesigned the Folders list for touch: each folder is now one large
   rounded, tappable card (icon + name + a three-dot menu) instead of a
   thin expandable list row. Removed the expand/collapse chevron and its
