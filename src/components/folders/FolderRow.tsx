@@ -4,21 +4,19 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import {
-  GripVertical,
-  ChevronRight,
-  ChevronDown,
-  MoreHorizontal,
-  Check,
-  Lock,
-} from "lucide-react";
+import { GripVertical, MoreHorizontal, Check } from "lucide-react";
 import type { Folder } from "@/lib/types";
 import { resolveFolderIcon } from "@/lib/folder-icons";
 
+/**
+ * A large, tappable folder card. The icon+name area is the only thing that
+ * opens the folder — the drag handle and overflow menu are separate
+ * controls next to it, not nested inside it, so dragging or opening the
+ * menu never triggers navigation.
+ */
 export function FolderRow({
   folder,
   canManage,
-  hasAccess,
   startInRename,
   onRenameCommit,
   onOpenSheet,
@@ -26,14 +24,12 @@ export function FolderRow({
 }: {
   folder: Folder;
   canManage: boolean;
-  hasAccess: boolean;
   startInRename: boolean;
   onRenameCommit: (name: string) => void;
   onOpenSheet: () => void;
   onRenameHandled: () => void;
 }) {
   const router = useRouter();
-  const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(startInRename);
   const [draft, setDraft] = useState(folder.name);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -84,55 +80,21 @@ export function FolderRow({
   };
 
   return (
-    <li
-      ref={setNodeRef}
-      style={style}
-      className={`select-none border-b border-gray-100 bg-white ${
-        isDragging ? "opacity-60 shadow-lg" : ""
-      }`}
-    >
-      <div className="flex items-center gap-1 px-2">
-        {/* Drag handle (admins only) */}
+    <li ref={setNodeRef} style={style} className={isDragging ? "opacity-60" : ""}>
+      <div className="flex items-center gap-1 rounded-2xl border border-gray-100 bg-white p-2 shadow-sm">
+        {/* Drag handle (admins only) — reorders, never opens the folder */}
         {canManage ? (
           <button
             type="button"
             aria-label="Reorder"
-            className="grid h-12 w-9 shrink-0 cursor-grab touch-none place-items-center text-gray-300 active:text-gray-500"
+            className="grid h-14 w-9 shrink-0 cursor-grab touch-none place-items-center text-gray-300 active:text-gray-500"
             {...attributes}
             {...listeners}
           >
             <GripVertical className="h-5 w-5" />
           </button>
-        ) : (
-          <span className="w-2" />
-        )}
+        ) : null}
 
-        {/* Expand / collapse */}
-        <button
-          type="button"
-          aria-label={expanded ? "Collapse" : "Expand"}
-          onClick={() => setExpanded((v) => !v)}
-          className="grid h-12 w-8 shrink-0 place-items-center text-gray-400 active:text-gray-600"
-        >
-          {expanded ? (
-            <ChevronDown className="h-5 w-5" />
-          ) : (
-            <ChevronRight className="h-5 w-5" />
-          )}
-        </button>
-
-        {/* Icon */}
-        <span
-          className="grid h-9 w-9 shrink-0 place-items-center rounded-lg"
-          style={{
-            backgroundColor: folder.color ? `${folder.color}1a` : "#f3f4f6",
-            color: folder.color ?? "#4b5563",
-          }}
-        >
-          <Icon className="h-5 w-5" />
-        </span>
-
-        {/* Name / inline rename */}
         {editing ? (
           <div className="flex flex-1 items-center gap-2 py-2 pl-2">
             <input
@@ -161,43 +123,35 @@ export function FolderRow({
           <button
             type="button"
             onClick={() => router.push(`/folders/${folder.id}`)}
-            className="flex flex-1 items-center gap-2 py-3 pl-2 text-left active:text-brand"
+            className="flex flex-1 items-center gap-3 rounded-xl py-3 pl-2 pr-2 text-left active:bg-gray-50"
           >
-            <span className="flex-1 truncate text-base font-medium text-gray-900">
+            <span
+              className="grid h-12 w-12 shrink-0 place-items-center rounded-xl"
+              style={{
+                backgroundColor: folder.color ? `${folder.color}1a` : "#f3f4f6",
+                color: folder.color ?? "#4b5563",
+              }}
+            >
+              <Icon className="h-6 w-6" />
+            </span>
+            <span className="flex-1 truncate text-lg font-semibold text-gray-900">
               {folder.name}
             </span>
-            {!hasAccess ? (
-              <span
-                className="flex shrink-0 items-center gap-1 text-gray-400"
-                aria-label="No access"
-              >
-                <Lock className="h-4 w-4" />
-              </span>
-            ) : null}
           </button>
         )}
 
-        {/* Overflow menu (admins only) */}
+        {/* Overflow menu (admins only) — independent of the open-folder tap */}
         {canManage && !editing ? (
           <button
             type="button"
             aria-label="Folder options"
             onClick={onOpenSheet}
-            className="grid h-12 w-11 shrink-0 place-items-center text-gray-400 active:text-gray-600"
+            className="grid h-14 w-11 shrink-0 place-items-center text-gray-400 active:text-gray-600"
           >
             <MoreHorizontal className="h-5 w-5" />
           </button>
-        ) : (
-          <span className="w-2" />
-        )}
+        ) : null}
       </div>
-
-      {/* Expanded body — folder contents live here in a later phase */}
-      {expanded ? (
-        <div className="px-14 pb-4 pt-1">
-          <p className="text-sm text-gray-400">Nothing in this folder yet.</p>
-        </div>
-      ) : null}
     </li>
   );
 }

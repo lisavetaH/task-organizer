@@ -38,14 +38,11 @@ export default async function FoldersPage() {
     .order("position", { ascending: true })
     .order("created_at", { ascending: true });
 
-  const accessibleIds = (folders ?? []).map((f) => (f as Folder).id);
-
   return (
     <FolderManager
       workspaceId={membership.workspace_id}
       canManage={isWorkspaceAdmin(membership.role)}
       initialFolders={(folders ?? []) as Folder[]}
-      accessibleIds={accessibleIds}
     />
   );
 }

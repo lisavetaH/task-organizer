@@ -76,6 +76,21 @@ All notable changes to this project are documented in this file.
   name text.
 
 ### Changed
+- Redesigned the Folders list for touch: each folder is now one large
+  rounded, tappable card (icon + name + a three-dot menu) instead of a
+  thin expandable list row. Removed the expand/collapse chevron and its
+  now-dead "Nothing in this folder yet" placeholder entirely — a single
+  tap anywhere on the card's icon/name area opens the folder immediately.
+  The drag handle stays, as a separate control next to the card (not
+  nested inside the tappable area), so reordering still works and never
+  triggers navigation; the overflow menu works the same way.
+  - `src/components/folders/FolderRow.tsx` — rewritten: no more `expanded`
+    state, no chevron icons, no per-row `hasAccess`/lock-icon branch
+    (dead code since migration 009 — RLS already only ever returns
+    folders the viewer can see, so it could never actually render).
+  - `src/components/folders/FolderManager.tsx` /
+    `src/app/(app)/folders/page.tsx` — removed the now-unused
+    `accessibleIds` prop plumbing that fed the dead lock-icon branch.
 - Replaced the "Delete my account" flow's account-removal step with the
   official Supabase architecture. The version shipped earlier today deleted
   `auth.users` directly from a `SECURITY DEFINER` SQL function — it worked

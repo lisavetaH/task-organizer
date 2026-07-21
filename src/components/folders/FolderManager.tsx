@@ -33,15 +33,12 @@ export function FolderManager({
   workspaceId,
   canManage,
   initialFolders,
-  accessibleIds,
 }: {
   workspaceId: string;
   canManage: boolean;
   initialFolders: Folder[];
-  accessibleIds: string[];
 }) {
   const [folders, setFolders] = useState<Folder[]>(initialFolders);
-  const accessible = new Set(accessibleIds);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [sheetId, setSheetId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -192,13 +189,12 @@ export function FolderManager({
             items={folders.map((f) => f.id)}
             strategy={verticalListSortingStrategy}
           >
-            <ul className="pb-6">
+            <ul className="flex flex-col gap-3 px-4 pb-6 pt-3">
               {folders.map((folder) => (
                 <FolderRow
                   key={folder.id}
                   folder={folder}
                   canManage={canManage}
-                  hasAccess={accessible.has(folder.id)}
                   startInRename={renamingId === folder.id}
                   onRenameHandled={() =>
                     setRenamingId((id) => (id === folder.id ? null : id))
